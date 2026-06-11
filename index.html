@@ -228,7 +228,17 @@ function startSync(){
       // マイグレーション
       S.children.forEach(c=>{if(!c.goal)c.goal={name:'',target:0};});
       if(!S.pending) S.pending=[];
+      else if(!Array.isArray(S.pending)) S.pending=Object.values(S.pending);
       if(!S.rules) S.rules=[];
+      else if(!Array.isArray(S.rules)) S.rules=Object.values(S.rules);
+      // transactionsの各子のデータをArray化
+      if(!S.transactions) S.transactions={};
+      S.children.forEach(c=>{
+        if(S.transactions[c.id] && !Array.isArray(S.transactions[c.id])){
+          S.transactions[c.id]=Object.values(S.transactions[c.id]);
+        }
+        if(!S.transactions[c.id]) S.transactions[c.id]=[];
+      });
     }
     if(!activeChild||!S.children.find(c=>c.id===activeChild)){
       activeChild=S.children[0]?.id||null;
@@ -512,9 +522,26 @@ async function doApprove(pid){
   const comment=document.getElementById('cmt_'+pid)?.value||'';
   const cn=(S?.children||[]).find(c=>c.id===p.childId)?.name||'';
   showConfirm('承認しますか？',`「${p.name}」（${cn}）<br>${p.txType==='income'?'+':'-'}¥${p.amount.toLocaleString()} を残高に反映します`,async()=>{
-    if(!S.transactions[p.childId])S.transactions[p.childId]=[];
-    S.transactions[p.childId].push({id:'t'+Date.now(),type:p.txType||'income',name:p.name+(comment?` 💬${comment}`:''),amount:p.amount,date:p.date,comment});
-    S.pending=S.pending.filter(x=>x.id!==pid);
+    // Firebaseは配列をオブジェクトに変換することがあるので必ずArray化する
+    const cid = p.childId;
+    if(!S.transactions) S.transactions = {};
+    const existing = S.transactions[cid];
+    const txArray = existing
+      ? (Array.isArray(existing) ? [...existing] : Object.values(existing))
+      : [];
+    txArray.push({
+      id:'t'+Date.now(),
+      type:p.txType||'income',
+      name:p.name+(comment?' 💬'+comment:''),
+      amount:p.amount,
+      date:p.date,
+      comment:comment
+    });
+    S.transactions[cid] = txArray;
+    // pendingも同様にArray化
+    const pendingArr = Array.isArray(S.pending)
+      ? S.pending : Object.values(S.pending||{});
+    S.pending = pendingArr.filter(x=>x.id!==pid);
     await save();},false);
 }
 function doReject(pid){
@@ -527,8 +554,15 @@ function doDeleteRule(rid){
   showConfirm('ルールを削除しますか？',`「${r.name}」を削除します`,async()=>{S.rules=S.rules.filter(x=>x.id!==rid);await save();});
 }
 function doDeleteTx(id){
-  const t=(S?.transactions?.[activeChild]||[]).find(x=>x.id===id);if(!t)return;
-  showConfirm('記録を削除しますか？',`「${t.name}」を削除します`,async()=>{S.transactions[activeChild]=S.transactions[activeChild].filter(x=>x.id!==id);await save();});
+  const raw=S?.transactions?.[activeChild];
+  const arr=raw?(Array.isArray(raw)?raw:Object.values(raw)):[];
+  const t=arr.find(x=>x.id===id);if(!t)return;
+  showConfirm('記録を削除しますか？',`「${t.name}」を削除します`,async()=>{
+    const r2=S?.transactions?.[activeChild];
+    const a2=r2?(Array.isArray(r2)?r2:Object.values(r2)):[];
+    S.transactions[activeChild]=a2.filter(x=>x.id!==id);
+    await save();
+  });
 }
 async function addRule(){
   const type=document.getElementById('ruleType')?.value||'other';
