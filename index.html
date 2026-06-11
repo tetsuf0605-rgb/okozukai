@@ -206,12 +206,20 @@ function initDefaultData(){
       c2:[]
     },
     pending: [],
-    rules: [
-      {id:'r1',type:'test',name:'テスト100点',amount:500,unit:'回'},
-      {id:'r2',type:'test',name:'テスト（点数×係数）',amount:10,unit:'点',isScore:true},
-      {id:'r3',type:'chore',name:'お手伝い',amount:50,unit:'回'},
-      {id:'r4',type:'chore',name:'掃除',amount:100,unit:'回'}
-    ]
+    rules: {
+      c1:[
+        {id:'r1',type:'test',name:'テスト100点',amount:500,unit:'回'},
+        {id:'r2',type:'test',name:'テスト（点数×係数）',amount:10,unit:'点',isScore:true},
+        {id:'r3',type:'chore',name:'お手伝い',amount:50,unit:'回'},
+        {id:'r4',type:'chore',name:'掃除',amount:100,unit:'回'}
+      ],
+      c2:[
+        {id:'r5',type:'test',name:'テスト100点',amount:500,unit:'回'},
+        {id:'r6',type:'test',name:'テスト（点数×係数）',amount:10,unit:'点',isScore:true},
+        {id:'r7',type:'chore',name:'お手伝い',amount:50,unit:'回'},
+        {id:'r8',type:'chore',name:'掃除',amount:100,unit:'回'}
+      ]
+    }
   };
 }
 
@@ -230,8 +238,22 @@ function startSync(){
       S.children.forEach(c=>{if(!c.goal)c.goal={name:'',target:0};});
       if(!S.pending) S.pending=[];
       else if(!Array.isArray(S.pending)) S.pending=Object.values(S.pending);
-      if(!S.rules) S.rules=[];
-      else if(!Array.isArray(S.rules)) S.rules=Object.values(S.rules);
+      // rulesを子供別に移行（旧形式: 配列 → 新形式: {c1:[...], c2:[...]}）
+      if(!S.rules){
+        S.rules={};
+        S.children.forEach(c=>{S.rules[c.id]=[];});
+      } else if(Array.isArray(S.rules)){
+        // 旧共通ルールを全子供にコピー
+        const oldRules=S.rules;
+        S.rules={};
+        S.children.forEach(c=>{S.rules[c.id]=[...oldRules.map(r=>({...r,id:r.id+'_'+c.id}))];});
+      } else if(typeof S.rules==='object'){
+        // オブジェクト形式の場合、各子供のルールをArray化
+        S.children.forEach(c=>{
+          if(!S.rules[c.id]) S.rules[c.id]=[];
+          else if(!Array.isArray(S.rules[c.id])) S.rules[c.id]=Object.values(S.rules[c.id]);
+        });
+      }
       // transactionsの各子のデータをArray化
       if(!S.transactions) S.transactions={};
       S.children.forEach(c=>{
@@ -309,6 +331,14 @@ async function updateMascotSerif(childName,balance,pendingCount){
 // ── ユーティリティ ──
 function fmt(d){return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;}
 function pendingForChild(cid){return (S?.pending||[]).filter(p=>p.childId===cid);}
+// 現在の子供のルール配列を返す
+function childRules(cid){
+  const cid2 = cid||activeChild;
+  if(!S?.rules) return [];
+  const r = S.rules[cid2];
+  if(!r) return [];
+  return Array.isArray(r) ? r : Object.values(r);
+}
 function getBalance(cid){return(S?.transactions?.[cid]||[]).reduce((s,t)=>s+(t.type==='income'?t.amount:-t.amount),0);}
 
 // ── モーダル ──
@@ -421,9 +451,9 @@ function buildApplyTab(){
 function buildManualForm(){return`<div><div style="font-size:11px;color:var(--text2);margin-bottom:8px">収入・支出を申請します。親の承認後に残高に反映されます。</div><div class="f-row"><div class="type-toggle"><button class="type-btn income${addType==='income'?' active':''}" onclick="setType('income')">収入</button><button class="type-btn expense${addType==='expense'?' active':''}" onclick="setType('expense')">支出</button></div><input type="text" id="mName" placeholder="内容" maxlength="20"/></div><div class="f-row"><input type="number" id="mAmount" placeholder="金額" min="1"/><input type="date" id="mDate"/></div><div id="mDateErr" class="err-msg" style="display:none"><i class="ti ti-alert-circle" style="font-size:11px"></i> 日付を選択してください</div><div class="f-row"><input type="text" id="mNote" placeholder="メモ（任意）" maxlength="40"/></div><button class="submit-btn" onclick="submitManualApply()"><i class="ti ti-send" style="font-size:13px;vertical-align:-2px"></i> 親に申請する</button></div>`;}
 
 function buildRuleForm(){
-  if(!(S?.rules||[]).length)return'<div class="empty" style="padding:12px">ルールが設定されていません</div>';
-  if(applyRuleId){const r=(S?.rules||[]).find(x=>x.id===applyRuleId);if(r)return buildRuleDetail(r);}
-  return`<div>${(S?.rules||[]).map(r=>`<div class="rule-card" style="cursor:pointer" onclick="selectApplyRule('${r.id}')"><div class="rule-icon" style="background:${RULE_COLORS[r.type]||'#EDE8F5'}">${RULE_EMOJI[r.type]||'⭐'}</div><div class="rule-info"><div class="rule-name">${r.name}</div><div class="rule-amount">${r.isScore?`点数×¥${r.amount}`:`+¥${r.amount}/${r.unit}`}</div></div><i class="ti ti-chevron-right" style="color:var(--text3)"></i></div>`).join('')}</div>`;
+  if(!childRules().length)return'<div class="empty" style="padding:12px">ルールが設定されていません</div>';
+  if(applyRuleId){const r=childRules().find(x=>x.id===applyRuleId);if(r)return buildRuleDetail(r);}
+  return`<div>${childRules().map(r=>`<div class="rule-card" style="cursor:pointer" onclick="selectApplyRule('${r.id}')"><div class="rule-icon" style="background:${RULE_COLORS[r.type]||'#EDE8F5'}">${RULE_EMOJI[r.type]||'⭐'}</div><div class="rule-info"><div class="rule-name">${r.name}</div><div class="rule-amount">${r.isScore?`点数×¥${r.amount}`:`+¥${r.amount}/${r.unit}`}</div></div><i class="ti ti-chevron-right" style="color:var(--text3)"></i></div>`).join('')}</div>`;
 }
 
 function buildRuleDetail(r){return`<div><button onclick="clearApplyRule()" style="font-size:12px;color:var(--ac-d);background:none;border:none;cursor:pointer;margin-bottom:8px"><i class="ti ti-arrow-left" style="font-size:12px"></i> 戻る</button><div style="background:var(--bg2);border-radius:12px;padding:11px;margin-bottom:8px"><div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px">${r.name}</div>${r.isScore?`<div class="score-row"><span style="font-size:12px;color:var(--text2)">点数</span><input type="number" id="scoreInput" min="0" max="100" placeholder="例: 85" oninput="updateScorePreview('${r.id}')" style="width:80px;flex:none;border:1px solid var(--border);border-radius:10px;padding:6px 8px;background:var(--white);font-size:13px"/><span style="font-size:12px;color:var(--mint-d);font-weight:700;min-width:64px;text-align:right" id="scorePreview">¥ —</span></div>`:`<div style="font-size:13px;color:var(--mint-d);font-weight:700;margin-bottom:4px">+¥${r.amount} 加算されます</div>`}<input type="date" id="ruleDate" style="width:100%;margin-top:7px;font-size:12px;padding:7px 9px;border:1px solid var(--border);border-radius:10px;background:var(--white);color:var(--text)"/><div id="ruleDateErr" class="err-msg" style="display:none;margin-top:4px"><i class="ti ti-alert-circle" style="font-size:11px"></i> 日付を選択してください</div></div><button class="submit-btn" style="background:linear-gradient(135deg,#D4A0C8,#E8B0C0)" onclick="submitRuleApply('${r.id}')"><i class="ti ti-send" style="font-size:13px;vertical-align:-2px"></i> 親に申請する</button></div>`;}
@@ -474,9 +504,9 @@ function buildParentView(){
       <div style="display:flex;gap:6px">${S?.pin?`<button class="pin-setup-btn" onclick="startChangePin()">変更</button><button class="pin-setup-btn" style="color:#D45F8C;border-color:#F5C2D8" onclick="startRemovePin()">削除</button>`:`<button class="pin-setup-btn" onclick="startSetPin()"><i class="ti ti-lock" style="font-size:12px"></i> 設定する</button>`}</div>
     </div>
     ${pend.length>0?`<div class="section-label" style="color:#B07A30"><i class="ti ti-clock" style="font-size:13px;margin-right:4px"></i>承認待ち ${pend.length}件</div>${pend.map(p=>`<div class="pending-item"><div class="pending-header"><div class="pending-icon"><i class="ti ti-${p.isManual?'pencil':'clock'}" style="font-size:16px;color:#C8A030"></i></div><div class="pending-info" style="flex:1"><div class="pending-name">${p.name} ${p.isManual?`<span style="font-size:10px;background:var(--bg3);color:var(--ac-d);padding:1px 6px;border-radius:8px">${p.txType==='income'?'収入':'支出'}</span>`:''}</div><div class="pending-detail">${p.detail}</div><div class="pending-detail">${p.requestedAt} 申請 · ${p.date}</div><div class="pending-amount">${p.txType==='expense'?'-':'+'}¥${p.amount.toLocaleString()}</div></div></div><div style="margin-bottom:8px"><div style="font-size:11px;color:var(--text2);margin-bottom:4px"><i class="ti ti-message" style="font-size:11px"></i> コメント（任意）</div><textarea class="comment-input" id="cmt_${p.id}" rows="2" placeholder="よくできました！など...">${p.parentComment||''}</textarea></div><div class="action-row"><button class="approve-btn" onclick="doApprove('${p.id}')"><i class="ti ti-check" style="font-size:13px;vertical-align:-2px"></i> 承認する</button><button class="reject-btn" onclick="doReject('${p.id}')"><i class="ti ti-x" style="font-size:13px;vertical-align:-2px"></i> 却下する</button></div></div>`).join('')}<div style="height:1px;background:var(--border);margin:12px 0"></div>`:''}
-    <div class="section-label"><i class="ti ti-list" style="font-size:12px;margin-right:4px"></i>ルール設定</div>
-    ${(S?.rules||[]).map(r=>`<div class="rule-card"><div class="rule-icon" style="background:${RULE_COLORS[r.type]||'#EDE8F5'}">${RULE_EMOJI[r.type]||'⭐'}</div><div class="rule-info"><div class="rule-name">${r.name}</div><div class="rule-amount">${r.isScore?`点数×¥${r.amount}`:`+¥${r.amount}/${r.unit}`}</div></div><button class="rule-del" onclick="doDeleteRule('${r.id}')"><i class="ti ti-trash" style="font-size:14px"></i></button></div>`).join('')}
-    ${!(S?.rules||[]).length?'<div class="empty">ルールがありません</div>':''}
+    <div class="section-label"><i class="ti ti-list" style="font-size:12px;margin-right:4px"></i>${(S?.children||[]).find(c=>c.id===activeChild)?.name||''}のルール設定</div>
+    ${childRules(activeChild).map(r=>`<div class="rule-card"><div class="rule-icon" style="background:${RULE_COLORS[r.type]||'#EDE8F5'}">${RULE_EMOJI[r.type]||'⭐'}</div><div class="rule-info"><div class="rule-name">${r.name}</div><div class="rule-amount">${r.isScore?`点数×¥${r.amount}`:`+¥${r.amount}/${r.unit}`}</div></div><button class="rule-del" onclick="doDeleteRule('${r.id}')"><i class="ti ti-trash" style="font-size:14px"></i></button></div>`).join('')}
+    ${!childRules(activeChild).length?'<div class="empty">ルールがありません</div>':''}
     <div style="background:var(--white);border:1px solid var(--border);border-radius:14px;padding:13px;margin-top:10px">
       <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:7px"><i class="ti ti-sparkles" style="font-size:12px"></i> 新しいルールを追加</div>
       <div class="f-row"><select id="ruleType"><option value="test">📝 テスト</option><option value="chore">🏠 お手伝い</option><option value="other">⭐ その他</option></select><input type="text" id="ruleName" placeholder="ルール名" maxlength="16"/></div>
@@ -525,7 +555,7 @@ function setFormTab(t){formTab=t;applyRuleId=null;render();}
 function setType(t){addType=t;render();}
 function selectApplyRule(rid){applyRuleId=rid;render();}
 function clearApplyRule(){applyRuleId=null;render();}
-function updateScorePreview(rid){const r=(S?.rules||[]).find(x=>x.id===rid);const v=parseInt(document.getElementById('scoreInput')?.value||'0');const el=document.getElementById('scorePreview');if(el&&r)el.textContent=v>0?`+¥${(v*r.amount).toLocaleString()}`:'¥ —';}
+function updateScorePreview(rid){const r=childRules().find(x=>x.id===rid);const v=parseInt(document.getElementById('scoreInput')?.value||'0');const el=document.getElementById('scorePreview');if(el&&r)el.textContent=v>0?`+¥${(v*r.amount).toLocaleString()}`:'¥ —';}
 function startSetPin(){pinInput='';pinMode='setup1';render();}
 function startChangePin(){pinInput='';pinMode='change1';render();}
 function startRemovePin(){pinInput='';pinMode='remove';render();}
@@ -563,8 +593,12 @@ function doReject(pid){
   showConfirm('却下しますか？',`「${p.name}」（${cn}）の申請を却下します。`,async()=>{S.pending=S.pending.filter(x=>x.id!==pid);await save();});
 }
 function doDeleteRule(rid){
-  const r=(S?.rules||[]).find(x=>x.id===rid);if(!r)return;
-  showConfirm('ルールを削除しますか？',`「${r.name}」を削除します`,async()=>{S.rules=S.rules.filter(x=>x.id!==rid);await save();});
+  const r=childRules(activeChild).find(x=>x.id===rid);if(!r)return;
+  showConfirm('ルールを削除しますか？',`「${r.name}」を削除します`,async()=>{
+    const arr=childRules(activeChild);
+    S.rules[activeChild]=arr.filter(x=>x.id!==rid);
+    await save();
+  });
 }
 function doDeleteTx(id){
   const raw=S?.transactions?.[activeChild];
@@ -590,8 +624,11 @@ async function addRule(){
   const amount=parseInt(document.getElementById('ruleAmount')?.value||'0');
   const isScore=document.getElementById('ruleIsScore')?.value==='1';
   if(!name||!amount||amount<1){showMsg('ルール名と金額を入力してください');return;}
-  if(!S.rules)S.rules=[];
-  S.rules.push({id:'r'+Date.now(),type,name,amount,unit:'回',isScore});
+  if(!S.rules) S.rules={};
+  if(!S.rules[activeChild]) S.rules[activeChild]=[];
+  const arr=Array.isArray(S.rules[activeChild])?S.rules[activeChild]:Object.values(S.rules[activeChild]);
+  arr.push({id:'r'+Date.now(),type,name,amount,unit:'回',isScore});
+  S.rules[activeChild]=arr;
   await save();
 }
 async function submitManualApply(){
@@ -608,7 +645,7 @@ async function submitManualApply(){
   await save();showMsg('申請しました！親の承認を待ってください');
 }
 async function submitRuleApply(rid){
-  const r=(S?.rules||[]).find(x=>x.id===rid);if(!r)return;
+  const r=childRules().find(x=>x.id===rid);if(!r)return;
   const rawDate=document.getElementById('ruleDate')?.value||'';
   const de=document.getElementById('ruleDateErr');
   if(!rawDate){if(de)de.style.display='block';showMsg('日付を選択してください');return;}
