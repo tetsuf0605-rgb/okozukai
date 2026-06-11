@@ -405,20 +405,34 @@ function getTimeLabel(){const h=new Date().getHours();if(h<6)return'深夜';if(h
 function getDow(){return['日曜日','月曜日','火曜日','水曜日','木曜日','金曜日','土曜日'][new Date().getDay()];}
 function fallbackSerif(name,season,w){const opts=[`${name}ちゃん、こんにちは！今日も一緒に管理しようワン🐾`,`${season}だね〜！おこづかい帳、ちゃんとつけてるワン？🐕`,w.ok?`今日は${w.weather}で${w.temp}℃だよ！元気に過ごしてワン🐾`:`今日もおこづかい帳、一緒につけようワン🐾`,`お金を大切にすると、夢に近づくよ🐾`,`きょうも1日がんばってね！応援してるワン🐕`];return opts[Math.floor(Math.random()*opts.length)];}
 async function updateMascotSerif(childName,balance,pendingCount){
-  const el=document.getElementById('mascot-bubble');if(!el)return;
-  if(_serifCache&&_serifCache.childId===activeChild&&Date.now()<_serifCache.expires){el.innerHTML=`<strong style="color:var(--ac-d)">${childName}</strong>ちゃん、${_serifCache.text.replace(/
-/g,'<br>')}`;return;}
-  const w=await getWeatherInfo();const season=getSeason(),time=getTimeLabel(),dow=getDow();
-  const ctx=[`今日は${dow}の${time}。`,`季節は${season}。`,w.ok?`天気は${w.weather}、気温${w.temp}℃（体感${w.feels}℃）。`:'',`${childName}ちゃんの残高は¥${balance.toLocaleString()}。`,pendingCount>0?`${pendingCount}件の申請が承認待ち。`:'承認待ちなし。'].join('');
-  const prompt=`あなたはロングコートブラックタンのチワワのマスコットです。小学生の${childName}ちゃんのおこづかい帳アプリで毎日ひと言セリフを言います。\n\n状況: ${ctx}\n\nルール:\n- 子供に話しかける自然な口調（2〜3文、50文字以内）\n- 天気・季節・時間帯・残高・申請状況のどれか絡める\n- 文末にワン！や🐾や🐕などを1つ\n- セリフのみ出力（説明・記号・引用符不要）`;
-  try{const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:100,messages:[{role:'user',content:prompt}]})});const data=await res.json();const text=data.content?.[0]?.text?.trim()||fallbackSerif(childName,season,w);_serifCache={text,expires:Date.now()+5*60*1000,childId:activeChild};const el2=document.getElementById('mascot-bubble');if(el2)el2.innerHTML=`<strong style="color:var(--ac-d)">${childName}</strong>ちゃん、${text.replace(/
-/g,'<br>`)}`;}catch(e){const text=fallbackSerif(childName,season,w);const el2=document.getElementById('mascot-bubble');if(el2)el2.innerHTML=`<strong style="color:var(--ac-d)">${childName}</strong>ちゃん、${text.replace(/
-/g,'<br>')}`;}}
+  const el=document.getElementById('mascot-bubble');
+  if(!el)return;
+  if(_serifCache&&_serifCache.childId===activeChild&&Date.now()<_serifCache.expires){
+    el.innerHTML='<strong style="color:var(--ac-d)">'+childName+'</strong>ちゃん、'+_serifCache.text.replace(/\n/g,'<br>');
+    return;
+  }
+  const w=await getWeatherInfo();
+  const season=getSeason(),time=getTimeLabel(),dow=getDow();
+  const ctx='今日は'+dow+'の'+time+'。季節は'+season+'。'+(w.ok?'天気は'+w.weather+'、気温'+w.temp+'℃（体感'+w.feels+'℃）。':'')+childName+'ちゃんの残高は¥'+balance.toLocaleString()+'。'+(pendingCount>0?pendingCount+'件の申請が承認待ち。':'承認待ちなし。');
+  const prompt='あなたはロングコートブラックタンのチワワのマスコットです。小学生の'+childName+'ちゃんのおこづかい帳アプリで毎日ひと言セリフを言います。\n\n状況: '+ctx+'\n\nルール:\n- 子供に話しかける自然な口調（2〜3文、50文字以内）\n- 天気・季節・時間帯・残高・申請状況のどれか絡める\n- 文末にワン！や🐾や🐕などを1つ\n- セリフのみ出力（説明・記号・引用符不要）';
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:100,messages:[{role:'user',content:prompt}]})
+    });
+    const data=await res.json();
+    const text=data.content&&data.content[0]?data.content[0].text.trim():fallbackSerif(childName,season,w);
+    _serifCache={text,expires:Date.now()+5*60*1000,childId:activeChild};
+    const el2=document.getElementById('mascot-bubble');
+    if(el2)el2.innerHTML='<strong style="color:var(--ac-d)">'+childName+'</strong>ちゃん、'+text.replace(/\n/g,'<br>');
+  }catch(e){
+    const text=fallbackSerif(childName,season,w);
+    const el2=document.getElementById('mascot-bubble');
+    if(el2)el2.innerHTML='<strong style="color:var(--ac-d)">'+childName+'</strong>ちゃん、'+text.replace(/\n/g,'<br>');
+  }
+}
 
-// ── グローバル関数 ──
-function pinPress(n){if(pinInput.length>=4)return;pinInput+=n;updateDots();if(pinInput.length===4)setTimeout(pinSubmit,120);}
-function pinDel(){pinInput=pinInput.slice(0,-1);updateDots();}
-function updateDots(){for(let i=0;i<4;i++){const d=document.getElementById('pd'+i);if(d)d.className='pin-dot'+(pinInput.length>i?' filled':'');}}
 function pinError(msg){const el=document.getElementById('pinErr');if(el)el.textContent=msg;for(let i=0;i<4;i++){const d=document.getElementById('pd'+i);if(d)d.className='pin-dot error';}setTimeout(()=>{pinInput='';updateDots();const e=document.getElementById('pinErr');if(e)e.textContent='';},700);}
 async function pinSubmit(){
   if(pinMode==='verify'){if(pinInput===S.pin){parentUnlocked=true;pinMode=null;mode='parent';render();}else pinError('PINが違います');}
