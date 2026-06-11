@@ -167,6 +167,7 @@ let S=null, mode='child', activeChild=null, subTab='home', addType='income', for
 let pinInput='', pinMode=null, pinSetupFirst='';
 let confirmState=null, applyRuleId=null;
 let _serifCache=null, _isSaving=false, _pendingWrite=null;
+let _pendingDeleteTxId=null, _pendingDeleteTxName='';
 
 const PINK_IDS=['c2'];
 const RULE_EMOJI={test:'📝',chore:'🏠',other:'⭐'};
@@ -486,8 +487,8 @@ function buildParentView(){
 }
 
 function buildPinHTML(){
-  const titles={verify:'親モードに切り替え',setup1:'PINを設定',setup2:'もう一度確認',change1:'新しいPINを入力',change2:'もう一度確認',remove:'現在のPINを入力'};
-  const subs={verify:'4桁のPINを入力してください',setup1:'4桁のPINを設定します',setup2:'同じPINをもう一度入力してください',change1:'新しい4桁のPINを入力してください',change2:'同じPINをもう一度入力してください',remove:'現在のPINを入力してください'};
+  const titles={verify:'親モードに切り替え',setup1:'PINを設定',setup2:'もう一度確認',change1:'新しいPINを入力',change2:'もう一度確認',remove:'現在のPINを入力',deleteTx:'記録を削除'};
+  const subs={verify:'4桁のPINを入力してください',setup1:'4桁のPINを設定します',setup2:'同じPINをもう一度入力してください',change1:'新しい4桁のPINを入力してください',change2:'同じPINをもう一度入力してください',remove:'現在のPINを入力してください',deleteTx:'PINを入力して削除を確認してください'};
   return`<div class="modal-box" style="text-align:center;padding:22px 18px"><div style="width:46px;height:46px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;margin:0 auto 10px"><i class="ti ti-lock" style="font-size:22px;color:var(--ac-d)"></i></div><div style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px">${titles[pinMode]}</div><div style="font-size:12px;color:var(--text2);margin-bottom:14px">${subs[pinMode]}</div><div class="pin-dots">${[0,1,2,3].map(i=>`<div class="pin-dot${pinInput.length>i?' filled':''}" id="pd${i}"></div>`).join('')}</div><div class="pin-error" id="pinErr"></div><div class="pin-grid">${[1,2,3,4,5,6,7,8,9].map(n=>`<button class="pin-key" onclick="pinPress('${n}')">${n}</button>`).join('')}<div></div><button class="pin-key" onclick="pinPress('0')">0</button><button class="pin-del" onclick="pinDel()"><i class="ti ti-backspace"></i></button></div><button class="pin-cancel" onclick="pinCancel()">キャンセル</button></div>`;
 }
 
@@ -503,6 +504,18 @@ async function pinSubmit(){
   else if(pinMode==='change1'){pinSetupFirst=pinInput;pinInput='';pinMode='change2';render();}
   else if(pinMode==='change2'){if(pinInput===pinSetupFirst){S.pin=pinInput;await save();pinMode=null;render();}else{pinSetupFirst='';pinError('PINが一致しません');setTimeout(()=>{pinMode='change1';pinInput='';render();},800);}}
   else if(pinMode==='remove'){if(pinInput===S.pin){S.pin=null;await save();pinMode=null;render();}else pinError('PINが違います');}
+  else if(pinMode==='deleteTx'){
+    if(pinInput===S.pin){
+      pinMode=null;
+      showConfirm('記録を削除しますか？',`「${_pendingDeleteTxName}」を削除します`,async()=>{
+        const r2=S?.transactions?.[activeChild];
+        const a2=r2?(Array.isArray(r2)?r2:Object.values(r2)):[];
+        S.transactions[activeChild]=a2.filter(x=>x.id!==_pendingDeleteTxId);
+        _pendingDeleteTxId=null;_pendingDeleteTxName='';
+        await save();
+      });
+    } else pinError('PINが違います');
+  }
 }
 function pinCancel(){if(pinMode==='verify')mode='child';pinMode=null;pinInput='';pinSetupFirst='';render();}
 function switchMode(m){if(m==='parent'&&S?.pin&&!parentUnlocked){pinMode='verify';pinInput='';render();return;}if(m==='parent')parentUnlocked=true;else parentUnlocked=false;mode=m;render();}
@@ -557,12 +570,19 @@ function doDeleteTx(id){
   const raw=S?.transactions?.[activeChild];
   const arr=raw?(Array.isArray(raw)?raw:Object.values(raw)):[];
   const t=arr.find(x=>x.id===id);if(!t)return;
-  showConfirm('記録を削除しますか？',`「${t.name}」を削除します`,async()=>{
-    const r2=S?.transactions?.[activeChild];
-    const a2=r2?(Array.isArray(r2)?r2:Object.values(r2)):[];
-    S.transactions[activeChild]=a2.filter(x=>x.id!==id);
-    await save();
-  });
+  // PINが設定されていたらPIN確認してから削除
+  if(S?.pin){
+    _pendingDeleteTxId=id;
+    _pendingDeleteTxName=t.name;
+    pinInput='';pinMode='deleteTx';render();
+  } else {
+    showConfirm('記録を削除しますか？',`「${t.name}」を削除します`,async()=>{
+      const r2=S?.transactions?.[activeChild];
+      const a2=r2?(Array.isArray(r2)?r2:Object.values(r2)):[];
+      S.transactions[activeChild]=a2.filter(x=>x.id!==id);
+      await save();
+    });
+  }
 }
 async function addRule(){
   const type=document.getElementById('ruleType')?.value||'other';
