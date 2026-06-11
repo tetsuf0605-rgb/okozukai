@@ -534,8 +534,33 @@ async function saveGoal(){
 let msgTimer=null;
 function showMsg(txt){let el=document.getElementById('toast');if(!el){el=document.createElement('div');el.id='toast';el.style.cssText='position:fixed;bottom:78px;left:50%;transform:translateX(-50%);background:var(--ac-d);color:white;padding:9px 18px;border-radius:20px;font-size:13px;z-index:400;white-space:nowrap;pointer-events:none;box-shadow:0 4px 12px rgba(140,100,200,0.3);transition:opacity 0.3s';document.body.appendChild(el);}el.textContent=txt;el.style.opacity='1';clearTimeout(msgTimer);msgTimer=setTimeout(()=>{el.style.opacity='0';},2400);}
 
-// onclick属性から呼べるようwindowに登録
-// グローバルスコープなのでwindow登録不要
+
+// ── PIN・グローバル関数 ──
+function pinPress(n){if(pinInput.length>=4)return;pinInput+=n;updateDots();if(pinInput.length===4)setTimeout(pinSubmit,120);}
+function pinDel(){pinInput=pinInput.slice(0,-1);updateDots();}
+function updateDots(){for(let i=0;i<4;i++){const d=document.getElementById('pd'+i);if(d)d.className='pin-dot'+(pinInput.length>i?' filled':'');}}
+function pinError(msg){const el=document.getElementById('pinErr');if(el)el.textContent=msg;for(let i=0;i<4;i++){const d=document.getElementById('pd'+i);if(d)d.className='pin-dot error';}setTimeout(()=>{pinInput='';updateDots();const e=document.getElementById('pinErr');if(e)e.textContent='';},700);}
+async function pinSubmit(){
+  if(pinMode==='verify'){if(pinInput===S.pin){parentUnlocked=true;pinMode=null;mode='parent';render();}else pinError('PINが違います');}
+  else if(pinMode==='setup1'){pinSetupFirst=pinInput;pinInput='';pinMode='setup2';render();}
+  else if(pinMode==='setup2'){if(pinInput===pinSetupFirst){S.pin=pinInput;await save();pinMode=null;render();}else{pinSetupFirst='';pinError('PINが一致しません');setTimeout(()=>{pinMode='setup1';pinInput='';render();},800);}}
+  else if(pinMode==='change1'){pinSetupFirst=pinInput;pinInput='';pinMode='change2';render();}
+  else if(pinMode==='change2'){if(pinInput===pinSetupFirst){S.pin=pinInput;await save();pinMode=null;render();}else{pinSetupFirst='';pinError('PINが一致しません');setTimeout(()=>{pinMode='change1';pinInput='';render();},800);}}
+  else if(pinMode==='remove'){if(pinInput===S.pin){S.pin=null;await save();pinMode=null;render();}else pinError('PINが違います');}
+  else if(pinMode==='deleteTx'){if(pinInput===S.pin){pinMode=null;showConfirm('記録を削除しますか？','「'+_pendingDeleteTxName+'」を削除します',async()=>{const a=getTxArr(activeChild).filter(x=>x.id!==_pendingDeleteTxId);S.transactions[activeChild]=a;_pendingDeleteTxId=null;_pendingDeleteTxName='';await save();});}else pinError('PINが違います');}
+}
+function pinCancel(){if(pinMode==='verify')mode='child';pinMode=null;pinInput='';pinSetupFirst='';render();}
+function switchMode(m){if(m==='parent'&&S&&S.pin&&!parentUnlocked){pinMode='verify';pinInput='';render();return;}if(m==='parent')parentUnlocked=true;else parentUnlocked=false;mode=m;render();}
+function switchChild(id){activeChild=id;applyTheme(id);_serifCache=null;render();}
+function setSubTab(t){subTab=t;render();}
+function setFormTab(t){formTab=t;applyRuleId=null;render();}
+function setType(t){addType=t;render();}
+function selectApplyRule(rid){applyRuleId=rid;render();}
+function clearApplyRule(){applyRuleId=null;render();}
+function updateScorePreview(rid){const r=getRules(activeChild).find(x=>x.id===rid);const v=parseInt(document.getElementById('scoreInput')&&document.getElementById('scoreInput').value||'0');const el=document.getElementById('scorePreview');if(el&&r)el.textContent=v>0?'+¥'+(v*r.amount).toLocaleString():'¥ —';}
+function startSetPin(){pinInput='';pinMode='setup1';render();}
+function startChangePin(){pinInput='';pinMode='change1';render();}
+function startRemovePin(){pinInput='';pinMode='remove';render();}
 
 startSync();
 </script>
